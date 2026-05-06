@@ -58,6 +58,7 @@ class NotchOverlayController: NSObject {
     private var currentScreenID: UInt32 = 0
     private var stopButtonPanel: NSPanel?
     private var escMonitor: Any?
+    private var globalKeyMonitor: Any?
 
     func show(text: String, hasNextPage: Bool = false, onComplete: (() -> Void)? = nil) {
         self.onComplete = onComplete
@@ -263,6 +264,8 @@ class NotchOverlayController: NSObject {
         if settings.notchDisplayMode == .followMouse {
             startMouseTracking()
         }
+
+        installKeyMonitor()
     }
 
     private func showFollowCursor(settings: NotchSettings, screen: NSScreen) {
@@ -396,15 +399,34 @@ class NotchOverlayController: NSObject {
         removeEscMonitor()
         escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            if event.keyCode == 53 { // ESC
+            switch event.keyCode {
+            case 53: // ESC
                 if self.overlayContent.showPagePicker {
                     self.overlayContent.showPagePicker = false
                     return nil
                 }
                 self.dismiss()
                 return nil
+            case 105: // F13 → Next Page
+                self.speechRecognizer.shouldAdvancePage = true
+                return nil
+            case 107: // F14 → Restart
+                self.overlayContent.jumpToPageIndex = self.overlayContent.currentPageIndex
+                return nil
+            default:
+                return event
             }
-            return event
+        }
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return }
+            switch event.keyCode {
+            case 105: // F13 → Next Page
+                self.speechRecognizer.shouldAdvancePage = true
+            case 107: // F14 → Restart
+                self.overlayContent.jumpToPageIndex = self.overlayContent.currentPageIndex
+            default:
+                break
+            }
         }
     }
 
@@ -513,6 +535,10 @@ class NotchOverlayController: NSObject {
             NSEvent.removeMonitor(escMonitor)
         }
         escMonitor = nil
+        if let globalKeyMonitor {
+            NSEvent.removeMonitor(globalKeyMonitor)
+        }
+        globalKeyMonitor = nil
     }
 }
 
